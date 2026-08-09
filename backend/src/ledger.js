@@ -13,9 +13,9 @@ export class CreditLedger extends DurableObject {
       "gemini-2.5-flash",
       "gemini-2.0-flash"
     ];
-    this.DAILY_CAP = 1500;
-    this.MIN_CREDITS = 20;
-    this.MAX_CREDITS = 100;
+    this.DAILY_CAP = 4000;
+    this.FREE_CREDS = 60;
+    this.CYCLE_DAYS = 4;
     this.SUB_CREDITS = 1000;
     this.kv = ctx.storage.kv || ctx.storage;
   }
@@ -296,24 +296,22 @@ export class CreditLedger extends DurableObject {
     return cur <= limit;
   }
 
-  fairShare(poolLeft, activeUsers) {
-    const raw = Math.floor(poolLeft / Math.max(activeUsers, 1));
-    return Math.min(this.MAX_CREDITS, Math.max(this.MIN_CREDITS, raw));
+  async grantFreeCycle(userId) {
+    const users = (await this.getJson("users")) || {};
+    const u = users[userId];
+    if (!u) return;
+    const now = Date.now();
+    if (!u.nextGrantAt || now >= u.nextGrantAt) {
+      u.credits = this.FREE_CREDS;
+      u.nextGrantAt = now + this.CYCLE_DAYS * 86400000;
+      await this.setJson("users", users);
+    }
   }
 
   async ensureMeta() {
     let meta = await this.getJson("meta");
     if (!meta || meta.date !== this.today()) {
       meta = { date: this.today(), calls: 0, keyCalls: {} };
-      const users = (await this.getJson("users")) || {};
-      const n = Object.keys(users).length;
-      if (n) {
-        const share = this.fairShare(this.DAILY_CAP, n);
-        for (const id of Object.keys(users)) {
-          users[id].credits = Math.max(users[id].credits, share);
-        }
-        await this.setJson("users", users);
-      }
       await this.setJson("meta", meta);
       try {
         const list = await this.kv.list({ prefix: "rate:" });
@@ -345,15 +343,14 @@ export class CreditLedger extends DurableObject {
     await this.ensureMeta();
     const users = (await this.getJson("users")) || {};
     const meta = await this.getJson("meta");
-    const active = Object.keys(users).length;
     const poolLeft = Math.max(this.DAILY_CAP - meta.calls, 0);
-    const credits = this.fairShare(poolLeft, active + 1);
     const seq = (await this.getJson("seq")) || 1;
+    const now = Date.now();
     const userId = "u" + seq;
-    users[userId] = { name, credits, registered: Date.now(), lastSeen: Date.now() };
+    users[userId] = { name, credits: this.FREE_CREDS, nextGrantAt: now + this.CYCLE_DAYS * 86400000, registered: now, lastSeen: now };
     await this.setJson("users", users);
     await this.setJson("seq", seq + 1);
-    return { userId, credits, poolLeft };
+    return { userId, credits: this.FREE_CREDS, poolLeft };
   }
 
   async me(userId) {
@@ -362,7 +359,10 @@ export class CreditLedger extends DurableObject {
     const u = users[userId];
     const meta = await this.getJson("meta");
     const subscribed = !!(u && u.sub && u.sub.active);
-    if (u) await this.refreshSubscription(userId);
+    if (u) {
+      await this.grantFreeCycle(userId);
+      await this.refreshSubscription(userId);
+    }
     return {
       ok: !!u,
       credits: u ? (u.balance || 0) + (u.credits || 0) : 0,
@@ -379,6 +379,7 @@ export class CreditLedger extends DurableObject {
     const users = (await this.getJson("users")) || {};
     const u = users[userId];
     if (!u) return { status: "no_user", error: "Unknown user. Please refresh the page." };
+    await this.grantFreeCycle(userId);
     await this.refreshSubscription(userId);
     const subscribed = !!(u.sub && u.sub.active);
     if (!subscribed && meta.calls >= this.DAILY_CAP) {
@@ -389,7 +390,7 @@ export class CreditLedger extends DurableObject {
         status: "no_credits",
         error: subscribed
           ? "Your Pro balance is used up for now."
-          : "You're out of credits. Credits refill when the daily pool resets."
+          : "You're out of credits. 60 free credits arrive every 4 days."
       };
     }
 
