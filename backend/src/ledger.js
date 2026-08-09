@@ -32,6 +32,23 @@ export class CreditLedger extends DurableObject {
     return new Date().toISOString().slice(0, 10);
   }
 
+  pad(n) { return String(n).padStart(2, "0"); }
+
+  minuteKey() {
+    const n = new Date();
+    return this.today() + "T" + this.pad(n.getUTCHours()) + ":" + this.pad(n.getUTCMinutes());
+  }
+
+  async rate(key, limit) {
+    const k = "rate:" + key + ":" + this.minuteKey();
+    let cur = 0;
+    const raw = await this.kv.get(k);
+    if (raw) cur = parseInt(raw, 10) || 0;
+    cur += 1;
+    await this.kv.put(k, String(cur));
+    return cur <= limit;
+  }
+
   fairShare(poolLeft, activeUsers) {
     const raw = Math.floor(poolLeft / Math.max(activeUsers, 1));
     return Math.min(this.MAX_CREDITS, Math.max(this.MIN_CREDITS, raw));
@@ -51,6 +68,17 @@ export class CreditLedger extends DurableObject {
         await this.setJson("users", users);
       }
       await this.setJson("meta", meta);
+      try {
+        const list = await this.kv.list({ prefix: "rate:" });
+        if (list && list.keys) {
+          const today = this.today();
+          for (const entry of list.keys) {
+            if (entry.name && entry.name.indexOf(today) === -1) {
+              await this.kv.delete(entry.name);
+            }
+          }
+        }
+      } catch (e) {}
     }
     return meta;
   }
@@ -96,7 +124,7 @@ export class CreditLedger extends DurableObject {
       return { status: "no_credits", error: "You're out of credits. Credits refill when the daily pool resets." };
     }
 
-    const models = model ? [model].concat(this.MODELS) : this.MODELS;
+    const models = model && this.MODELS.indexOf(model) !== -1 ? [model].concat(this.MODELS) : this.MODELS;
     const keyOrder = [...this.KEYS].sort((a, b) => (meta.keyCalls[a] || 0) - (meta.keyCalls[b] || 0));
     let lastErr = "";
 

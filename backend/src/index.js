@@ -2,6 +2,18 @@ import { CreditLedger } from "./ledger.js";
 
 export { CreditLedger };
 
+const ALLOWED_ORIGINS = [
+  "https://recipe-verse-one.vercel.app",
+  "https://khaleely572-sudo.github.io"
+];
+
+function originOk(request) {
+  const o = request.headers.get("origin");
+  if (!o || o === "null") return true;
+  if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(o)) return true;
+  return ALLOWED_ORIGINS.indexOf(o) !== -1;
+}
+
 const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
@@ -16,10 +28,27 @@ function json(data, status) {
   });
 }
 
+function clientIp(request) {
+  return request.headers.get("cf-connecting-ip") || request.headers.get("x-real-ip") || "unknown";
+}
+
+const UID_RE = /^u[0-9]+$/;
+
+async function readJson(request, maxBytes) {
+  const text = await request.text().catch(() => "");
+  if (!text) return "empty";
+  if (text.length > maxBytes) return "too_large";
+  try { return JSON.parse(text); } catch (e) { return "bad_json"; }
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     const path = url.pathname;
+
+    if (!originOk(request)) {
+      return json({ ok: false, error: "Origin not allowed." }, 403);
+    }
 
     if (request.method === "OPTIONS") {
       return new Response(null, { status: 204, headers: CORS });
@@ -27,29 +56,49 @@ export default {
 
     const id = env.LEDGER.idFromName("global");
     const stub = env.LEDGER.get(id);
+    const ip = clientIp(request);
 
     if (path === "/" || path === "/api/health") {
       return json({ ok: true, service: "recipeverse-backend" });
     }
 
     if (path === "/api/register" && request.method === "POST") {
-      const body = await request.json().catch(() => ({}));
-      const name = String(body.name || "Guest").slice(0, 60);
-      const result = await stub.register(name);
-      return json({ ok: true, userId: result.userId, credits: result.credits, poolLeft: result.poolLeft });
+      if (!(await stub.rate("reg|" + ip, 10))) {
+        return json({ ok: false, error: "Too many registrations. Try again in a minute." }, 429);
+      }
+      const parsed = await readJson(request, 64 * 1024);
+      if (parsed === "too_large") return json({ ok: false, error: "Request too large." }, 413);
+      if (parsed !== "empty" && parsed !== "bad_json" && parsed) {
+        const body = parsed;
+        const name = String(body.name || "Guest").replace(/[<>&"']/g, "").slice(0, 60);
+        const result = await stub.register(name);
+        return json({ ok: true, userId: result.userId, credits: result.credits, poolLeft: result.poolLeft });
+      }
+      return json({ ok: false, error: "Invalid request." }, 400);
     }
 
     if (path === "/api/me" && request.method === "GET") {
       const userId = request.headers.get("x-user-id") || "";
+      if (!UID_RE.test(userId)) return json({ ok: false, error: "Invalid user id." }, 400);
+      if (!(await stub.rate("me|" + ip, 120))) {
+        return json({ ok: false, error: "Too many requests. Try again in a minute." }, 429);
+      }
       return json(await stub.me(userId));
     }
 
     if (path === "/api/ai" && request.method === "POST") {
-      const body = await request.json().catch(() => null);
-      if (!body || !body.body) return json({ ok: false, error: "Invalid request." }, 400);
-      const userId = String(body.userId || "");
-      const gemBody = body.body;
-      const model = body.model || "";
+      const parsed = await readJson(request, 2 * 1024 * 1024);
+      if (parsed === "too_large") return json({ ok: false, error: "Request too large." }, 413);
+      if (parsed === "empty" || parsed === "bad_json" || !parsed || !parsed.body) {
+        return json({ ok: false, error: "Invalid request." }, 400);
+      }
+      const userId = String(parsed.userId || "");
+      if (!UID_RE.test(userId)) return json({ ok: false, error: "Invalid user id." }, 400);
+      if (!(await stub.rate("ai|" + ip, 30))) {
+        return json({ ok: false, error: "Too many requests. Try again in a minute." }, 429);
+      }
+      const gemBody = parsed.body;
+      const model = /^[a-z0-9.\-]+$/.test(String(parsed.model || "")) ? String(parsed.model) : "";
       const result = await stub.proxyAI({ userId, model, gemBody });
       if (result.status !== "ok") {
         return json({ ok: false, error: result.error, reason: result.status }, 402);
