@@ -72,8 +72,11 @@
           <button id="rotw-refresh" class="btn small">New pick</button>
         </div>
       </div>
+      <div id="rotw-loading" class="loading-line">
+        <div class="loading-track"><span class="loading-fill"></span></div>
+        <span class="loading-label">Picking today&rsquo;s recipe...</span>
+      </div>
       <p class="muted tiny" id="rotw-note">Fresh recipe every day at midnight, inspired by your country.</p>
-      <div id="rotw-loading" class="state-line">Picking today&rsquo;s recipe...</div>
       <article id="rotw-card" class="card recipe-card hidden"></article>
 
       <div class="cards-row">
@@ -109,9 +112,12 @@
           <label for="cal-text">Or type the food</label>
           <input id="cal-text" type="text" placeholder="e.g. lamb, noodles, dessert" />
           <button id="cal-scan" class="btn block">Scan Calories</button>
+          <div id="cal-loading" class="loading-line hidden">
+            <div class="loading-track"><span class="loading-fill"></span></div>
+            <span class="loading-label">Reading your plate...</span>
+          </div>
         </div>
         <div class="card">
-          <div id="cal-loading" class="state hidden">Reading your plate...</div>
           <div id="cal-result" class="result-list"></div>
           <p id="cal-empty" class="muted">Results will appear here.</p>
         </div>
@@ -132,8 +138,11 @@
           <button id="fridge-scan" class="btn">Scan &amp; Identify Everything</button>
           <button id="fridge-recipes" class="btn" disabled>Generate Recipes</button>
         </div>
+        <div id="fridge-loading" class="loading-line hidden">
+          <div class="loading-track"><span class="loading-fill"></span></div>
+          <span class="loading-label">Opening the fridge door in your kitchen...</span>
+        </div>
       </div>
-      <div id="fridge-loading" class="state hidden">Opening the fridge door in your kitchen...</div>
       <div id="fridge-items" class="card hidden">
         <h3>Everything found in your fridge</h3>
         <div id="fridge-items-list" class="chips"></div>
@@ -161,9 +170,12 @@
           <button id="gen-next" class="btn" title="Next slot">&rarr;</button>
           <button id="gen-go" class="btn">Cook this slot</button>
         </div>
+        <div id="gen-loading" class="loading-line hidden">
+          <div class="loading-track"><span class="loading-fill"></span></div>
+          <span class="loading-label">Generating your recipe...</span>
+        </div>
         <p class="muted tiny" id="gen-meta">Slot #1 of 60,000 &middot; recipes are generated on demand, not stored all at once.</p>
       </div>
-      <div id="gen-loading" class="state hidden"></div>
       <div id="gen-result" class="cards-list"></div>
     </section>
   </main>

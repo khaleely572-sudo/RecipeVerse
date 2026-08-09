@@ -692,6 +692,7 @@ var GEN_AUTHOR_SYS = [
     var key = genCacheKey();
     var cached = storage(key);
     if (cached) { renderGen(cached, key); return; }
+    $("gen-loading").querySelector(".loading-label").textContent = "Generating recipe #" + slot.toLocaleString("en-US") + "...";
     setLoading("gen-loading", true);
     $("gen-result").innerHTML = "";
     gemini(window.KEY_GENERAL, GEN_DISCOVER_SYS, [{ text: "Slot: " + slot + (keyword ? ". Keyword: " + keyword : "") + "." }])

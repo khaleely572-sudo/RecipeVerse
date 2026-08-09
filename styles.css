@@ -114,6 +114,23 @@ main { max-width: 1080px; margin: 0 auto; padding: 30px 22px 60px; }
   font-size: 0.7rem; letter-spacing: 0.08em; padding: 4px 9px; border-radius: 999px; font-weight: 700;
 }
 .rotw-ctrl { display: flex; gap: 8px; align-items: center; }
+
+.loading-line { margin: 12px 0 2px; }
+.loading-track {
+  height: 4px; border-radius: 999px; overflow: hidden;
+  background: var(--line); position: relative;
+}
+.loading-fill {
+  position: absolute; top: 0; bottom: 0; left: -40%;
+  width: 40%; border-radius: 999px;
+  background: var(--accent);
+  animation: loading-slide 1.15s ease-in-out infinite;
+}
+@keyframes loading-slide {
+  0% { left: -40%; }
+  100% { left: 100%; }
+}
+.loading-label { display: block; margin-top: 6px; color: var(--muted); font-size: 0.85rem; font-style: italic; }
 .state-line { color: var(--muted); font-size: 0.9rem; }
 
 .card {
