@@ -3,7 +3,7 @@ import { CreditLedger } from "./ledger.js";
 export { CreditLedger };
 
 const ALLOWED_ORIGINS = [
-  "https://recipe-verse-one.vercel.app",
+  "https://recipverse.vercel.app",
   "https://khaleely572-sudo.github.io"
 ];
 
