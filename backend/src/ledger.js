@@ -29,7 +29,9 @@ export class CreditLedger extends DurableObject {
   }
 
   async paypalToken() {
-    const cached = await this.kv.get("pay_token");
+    const mode = this.env.PAYPAL_MODE === "sandbox" ? "sandbox" : "live";
+    const cacheKey = "pay_token:" + mode;
+    const cached = await this.kv.get(cacheKey);
     if (cached) {
       const t = JSON.parse(cached);
       if (t && t.exp > Date.now()) return t.token;
@@ -49,7 +51,7 @@ export class CreditLedger extends DurableObject {
     if (!res.ok || !data.access_token) {
       throw new Error("PayPal auth failed: " + (data.error_description || ("HTTP " + res.status)));
     }
-    await this.kv.put("pay_token", JSON.stringify({ token: data.access_token, exp: Date.now() + (parseInt(data.expires_in, 10) - 60) * 1000 }));
+    await this.kv.put(cacheKey, JSON.stringify({ token: data.access_token, exp: Date.now() + (parseInt(data.expires_in, 10) - 60) * 1000 }));
     return data.access_token;
   }
 
