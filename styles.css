@@ -121,14 +121,10 @@ main { max-width: 1080px; margin: 0 auto; padding: 30px 22px 60px; }
   background: var(--line); position: relative;
 }
 .loading-fill {
-  position: absolute; top: 0; bottom: 0; left: -40%;
-  width: 40%; border-radius: 999px;
+  position: absolute; top: 0; bottom: 0; left: 0; width: 0%;
+  border-radius: 999px;
   background: var(--accent);
-  animation: loading-slide 1.15s ease-in-out infinite;
-}
-@keyframes loading-slide {
-  0% { left: -40%; }
-  100% { left: 100%; }
+  transition: width 0.25s ease-out;
 }
 .loading-label { display: block; margin-top: 6px; color: var(--muted); font-size: 0.85rem; font-style: italic; }
 .state-line { color: var(--muted); font-size: 0.9rem; }

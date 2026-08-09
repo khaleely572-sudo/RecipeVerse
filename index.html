@@ -92,7 +92,7 @@
         </div>
         <div class="tile" data-go="generator">
           <h3>Recipe Generator</h3>
-          <p>60,000 recipes by country. Pick a region, cook a classic.</p>
+          <p>60,000 recipes from all over the world. Pick a country - or leave it a surprise.</p>
           <span class="tile-cta">Open &rsaquo;</span>
         </div>
       </div>
@@ -158,11 +158,13 @@
     <section id="view-generator" class="view hidden">
       <header class="view-header">
         <h2>Recipe Generator</h2>
-        <p class="muted">A catalog of <strong>60,000 recipes</strong> from cuisines all over the world. Hop between catalog slots (or add a keyword) and real recipes with true ingredients and oven instructions are created live.</p>
+        <p class="muted">A catalog of <strong>60,000 recipes</strong> from cuisines all over the world. Type what you crave (like &quot;soft cookies&quot;), pick a country for a classic - or leave it a surprise - and a real recipe with true ingredients and oven instructions is created live.</p>
       </header>
       <div class="card">
-        <label for="gen-word">Dish keyword <span class="muted">(optional)</span></label>
-        <input id="gen-word" type="text" placeholder="e.g. lamb, noodles, dessert" />
+        <label for="gen-word">Dish keyword <span class="muted">(optional - e.g. &quot;soft cookies&quot;)</span></label>
+        <input id="gen-word" type="text" placeholder="e.g. soft cookies, lamb curry, dessert" />
+        <label for="gen-country">Choose a country <span class="muted">(optional - leave as surprise for worldwide)</span></label>
+        <select id="gen-country"></select>
         <div class="row wrap">
           <button id="gen-random" class="btn">Random recipe</button>
           <button id="gen-prev" class="btn" title="Previous slot">&larr;</button>

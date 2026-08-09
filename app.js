@@ -174,6 +174,19 @@
     fillSelect($("auth-country"), user ? user.country : "");
     fillSelect($("rotw-country"), user ? user.country : "");
     fillSelect($("profile-country"), user ? user.country : "");
+    var gc = $("gen-country");
+    gc.innerHTML = "";
+    var o = document.createElement("option");
+    o.value = "";
+    o.textContent = "Surprise me (worldwide)";
+    gc.appendChild(o);
+    (window.COUNTRIES || window.FALLBACK_COUNTRIES || []).forEach(function (c) {
+      var op = document.createElement("option");
+      op.value = c;
+      op.textContent = c;
+      gc.appendChild(op);
+    });
+    gc.value = "";
   }
 
   /* ---------------- auth ---------------- */
@@ -350,7 +363,73 @@
   }
   function visionParts(d) { return [{ inline_data: { mime_type: d.mime, data: d.data } }]; }
 
-  function setLoading(id, on) { $(id).classList.toggle("hidden", !on); }
+  var LOAD_QUOTES = {
+    cal: [
+      "Counting calories one pixel at a time...",
+      "Asking a ghost nutritionist for a second opinion...",
+      "The plate is being judged by a very opinionated AI...",
+      "Measuring the mystery leftovers...",
+      "The scale is trembling with anticipation...",
+      "Bribing the AI with a salad to be nice..."
+    ],
+    fridge: [
+      "Opening the fridge door... (the AI is feeling chilly)",
+      "Bribing the AI with a carrot...",
+      "That container from last week is under review...",
+      "Counting eggs that may or may not exist...",
+      "The crisper drawer is being interrogated...",
+      "Spotting forgotten leftovers in the back row...",
+      "The AI is 3 shelves deep and loving it..."
+    ],
+    rotw: [
+      "Consulting the world's best chefs...",
+      "Spinning the globe very, very fast...",
+      "Asking every grandmother for her secret recipe...",
+      "Choosing between 195 countries' cuisines...",
+      "The daily special is being decided by AI committee...",
+      "Bribing the chef with a fresh baguette...",
+      "Checking what the rest of the world is eating..."
+    ],
+    gen: [
+      "Browsing 60,000 recipes...",
+      "The AI is reading a cookbook the size of a house...",
+      "Pulling the slot-machine lever...",
+      "Consulting the culinary oracle...",
+      "Sifting through cuisines from A to Z...",
+      "Chef AI is warming up its imaginary oven...",
+      "Deciding between classic and 'why not'...",
+      "The recipe gremlins are on a coffee break..."
+    ]
+  };
+
+  function startLoader(id, quotes, seconds) {
+    var line = $(id);
+    var fill = line ? line.querySelector(".loading-fill") : null;
+    var label = line ? line.querySelector(".loading-label") : null;
+    if (line) line.classList.remove("hidden");
+    if (fill) fill.style.width = "0%";
+    if (label && quotes && quotes.length) label.textContent = quotes[0];
+    var started = Date.now();
+    var dur = Math.max(4, seconds || 10) * 1000;
+    var qi = 0;
+    var qTimer = (quotes && quotes.length > 1) ? setInterval(function () {
+      qi = (qi + 1) % quotes.length;
+      if (label) label.textContent = quotes[qi];
+    }, 2600) : null;
+    var fillTimer = setInterval(function () {
+      var t = Math.min(1, (Date.now() - started) / dur);
+      var eased = 1 - Math.pow(1 - t, 2.6);
+      if (fill) fill.style.width = Math.round(eased * 100) + "%";
+    }, 120);
+    return {
+      done: function () {
+        clearInterval(qTimer);
+        clearInterval(fillTimer);
+        if (fill) fill.style.width = "100%";
+        setTimeout(function () { if (line) line.classList.add("hidden"); }, 400);
+      }
+    };
+  }
   function errBox(msg) { return '<div class="state">' + esc(msg) + "</div>"; }
 
   /* ---------------- prompts ---------------- */
@@ -380,7 +459,10 @@
 
   var GEN_DISCOVER_SYS = [
     "You are a catalog of the world's cuisines.",
-    "Given a slot number and an optional keyword, choose ONE real, authentic, iconic dish from anywhere on Earth - any country, any cuisine.",
+    "Given a slot number and optional hints (a country and a keyword), choose ONE real, authentic, iconic dish.",
+    "If a country is given, the dish MUST be a genuinely iconic dish of that country.",
+    "If a keyword is given, the dish MUST match it exactly - for example the keyword 'cookies' must yield a famous cookie recipe, 'pizza' a real pizza, 'soft cookies' a well-known soft, chewy cookie.",
+    "If no hints are given, pick from anywhere on Earth - any country, any cuisine.",
     "Let the slot number pick different countries and dishes so consecutive slots hop across the world.",
     'Return JSON: { "dish", "country" } with the dish name short and its true cuisine/country.'
   ].join(" ");
@@ -390,6 +472,7 @@ var GEN_AUTHOR_SYS = [
     "Write the complete recipe for the named dish from its true cuisine, wherever in the world that may be.",
     "It MUST be a real, recognizable dish with genuine ingredients and realistic, executable steps.",
     "Include oven/burner temperatures and timings, and exact-ish quantities.",
+    "For baked goods (cookies, cakes, breads), use the famously reliable techniques that guarantee the classic result - for example soft, chewy cookies come from melted butter, an extra egg yolk and chilled dough.",
     'Return JSON: { "name", "country", "servings", "cook_time_minutes", "difficulty", "description", "ingredients", "steps" }.',
     '"ingredients" is an array of strings with quantities. "steps" is an ordered array of instruction strings. Never invent fake steps or fantasy ingredients.'
   ].join(" ");
@@ -421,24 +504,26 @@ var GEN_AUTHOR_SYS = [
     if (r.difficulty) bits.push(r.difficulty);
     return bits.join(" - ");
   }
+  var recipeStore = [];
+  var recipeSeq = 0;
   function recipeCardHtml(r, label) {
+    var idx = ++recipeSeq;
+    recipeStore[idx] = r;
     return (
       '<div class="card recipe-mini">' +
       '<h3>' + esc(r.name || "Recipe") + "</h3>" +
       '<div class="meta">' + esc(recipeMeta(r) || "") + (label ? " - " + esc(label) : "") + "</div>" +
       "<p>" + esc(r.description || "A real, cookable recipe.") + "</p>" +
-      '<button class="btn small open-recipe" data-recipe="' + esc(JSON.stringify(r)) + '">View &amp; Cook</button>' +
+      '<button class="btn small open-recipe" data-idx="' + idx + '">View &amp; Cook</button>' +
       "</div>"
     );
   }
-  function wireOpenButtons(container) {
-    $$(".open-recipe", container).forEach(function (b) {
-      b.addEventListener("click", function () {
-        var recipe = JSON.parse(b.dataset.recipe);
-        openRecipeModal(recipe);
-      });
-    });
-  }
+  document.addEventListener("click", function (e) {
+    var btn = e.target && e.target.closest ? e.target.closest(".open-recipe") : null;
+    if (!btn) return;
+    var recipe = recipeStore[Number(btn.getAttribute("data-idx")) || 0];
+    if (recipe) openRecipeModal(recipe);
+  });
   function openRecipeModal(recipe) {
     state.currentRecipe = recipe;
     var b = $("modal-body");
@@ -506,25 +591,25 @@ var GEN_AUTHOR_SYS = [
     $("rotw-card").classList.add("hidden");
     if (cached) { renderRotw(cached); return; }
     if (rotwInflight && rotwInflight.key === key) return;
-    setLoading("rotw-loading", true);
     $("rotw-note").textContent = "Fresh recipe every day at midnight for " + country + ".";
-    rotwInflight = { key: key };
+    var load = startLoader("rotw-loading", LOAD_QUOTES.rotw, 12);
+    rotwInflight = { key: key, load: load };
     gemini(window.KEY_RECIPES, ROTW_SYS(country, dateKey()), []).then(function (r) {
       storage(key, r);
       renderRotw(r);
     }).catch(function (e) {
-      $("rotw-loading").classList.add("hidden");
       $("rotw-card").innerHTML = errBox(e.message);
       $("rotw-card").classList.remove("hidden");
     }).finally(function () {
-      if (rotwInflight && rotwInflight.key === key) rotwInflight = null;
+      if (rotwInflight && rotwInflight.key === key) {
+        rotwInflight.load.done();
+        rotwInflight = null;
+      }
     });
   }
   function renderRotw(r) {
-    setLoading("rotw-loading", false);
     $("rotw-card").innerHTML = recipeCardHtml(r, "Today's pick");
     $("rotw-card").classList.remove("hidden");
-    wireOpenButtons($("rotw-card"));
   }
   $("rotw-refresh").addEventListener("click", function () {
     var key = "rv_rotw_" + $("rotw-country").value + "_" + dateKey();
@@ -565,20 +650,17 @@ var GEN_AUTHOR_SYS = [
     var img = $("cal-img").files[0];
     var text = $("cal-text").value.trim();
     if (!img && !text) { toast("Add a photo or type a food first."); return; }
-    setLoading("cal-loading", true);
+    var load = startLoader("cal-loading", LOAD_QUOTES.cal, 9);
     $("cal-empty").classList.add("hidden");
     $("cal-result").innerHTML = "";
     var parts = [];
     if (text) parts.push({ text: "Food described: " + text });
-    if (img) {
-      fileToData(img).then(function (d) {
-        return gemini(window.KEY_CALORIES, CAL_SYS, parts.concat(visionParts(d)));
-      }).then(function (out) { renderCalorie(out); setLoading("cal-loading", false); })
-        .catch(function (e) { $("cal-result").innerHTML = errBox(e.message); setLoading("cal-loading", false); });
-    } else {
-      gemini(window.KEY_CALORIES, CAL_SYS, parts).then(function (out) { renderCalorie(out); setLoading("cal-loading", false); })
-        .catch(function (e) { $("cal-result").innerHTML = errBox(e.message); setLoading("cal-loading", false); });
-    }
+    var call = img
+      ? fileToData(img).then(function (d) { return gemini(window.KEY_CALORIES, CAL_SYS, parts.concat(visionParts(d))); })
+      : gemini(window.KEY_CALORIES, CAL_SYS, parts);
+    call.then(function (out) { renderCalorie(out); })
+      .catch(function (e) { $("cal-result").innerHTML = errBox(e.message); })
+      .then(function () { load.done(); });
   });
   $("cal-img").addEventListener("change", function () {
     var f = $("cal-img").files[0];
@@ -603,7 +685,7 @@ var GEN_AUTHOR_SYS = [
   $("fridge-scan").addEventListener("click", function () {
     var files = $("fridge-img").files;
     if (!files.length) { toast("Add at least one photo of your fridge."); return; }
-    setLoading("fridge-loading", true);
+    var load = startLoader("fridge-loading", LOAD_QUOTES.fridge, 12);
     $("fridge-items").classList.add("hidden");
     $("fridge-recipes-wrap").classList.add("hidden");
     $("fridge-recipes").disabled = true;
@@ -614,7 +696,7 @@ var GEN_AUTHOR_SYS = [
       ds.forEach(function (d) { parts = parts.concat(visionParts(d)); });
       return gemini(window.KEY_FRIDGE, FRIDGE_ID_SYS, parts);
     }).then(function (out) {
-      setLoading("fridge-loading", false);
+      load.done();
       state.fridgeItems = out.items || [];
       renderFridgeItems(out);
       if (state.fridgeItems.length) {
@@ -625,7 +707,7 @@ var GEN_AUTHOR_SYS = [
         toast("No items detected - try clearer photos.");
       }
     }).catch(function (e) {
-      setLoading("fridge-loading", false);
+      load.done();
       $("fridge-items").classList.remove("hidden");
       $("fridge-items-list").innerHTML = "";
       $("fridge-note").textContent = e.message;
@@ -643,23 +725,22 @@ var GEN_AUTHOR_SYS = [
   }
   $("fridge-recipes").addEventListener("click", function () {
     if (!state.fridgeItems || !state.fridgeItems.length) { toast("Scan the fridge first."); return; }
-    setLoading("fridge-loading", true);
+    var load = startLoader("fridge-loading", LOAD_QUOTES.fridge, 12);
     $("fridge-recipes-wrap").classList.add("hidden");
     var itemNames = state.fridgeItems.map(function (it) {
       return it.name + (it.quantity ? " (" + it.quantity + ")" : "");
     }).join(", ");
     gemini(window.KEY_RECIPES, FRIDGE_RECIPES_SYS, [{ text: "Fridge items: " + itemNames }])
       .then(function (out) {
-        setLoading("fridge-loading", false);
+        load.done();
         var recipes = out.recipes || [];
         var list = $("fridge-recipes-list");
         list.innerHTML = recipes.map(function (r) { return recipeCardHtml(r, "from your fridge"); }).join("");
-        wireOpenButtons(list);
         $("fridge-recipes-wrap").classList.remove("hidden");
         if (!recipes.length) toast("No recipes returned.");
       })
       .catch(function (e) {
-        setLoading("fridge-loading", false);
+        load.done();
         toast(e.message);
       });
   });
@@ -670,8 +751,9 @@ var GEN_AUTHOR_SYS = [
     return s.toLocaleString("en-US") + " / " + TOTAL_SLOTS.toLocaleString("en-US");
   }
   function genMeta() {
+    var country = $("gen-country").value || "Worldwide surprise";
     $("gen-meta").textContent = "Recipe #" + slotLabel() +
-      " - worldwide catalog - cached locally, nothing stored on a server.";
+      " - " + country + " - cached locally, nothing stored on a server.";
   }
   function setSlot(v) {
     $("gen-slot").value = Math.min(TOTAL_SLOTS, Math.max(1, v));
@@ -681,21 +763,26 @@ var GEN_AUTHOR_SYS = [
   $("gen-next").addEventListener("click", function () { setSlot((parseInt($("gen-slot").value, 10) || 1) + 1); });
   $("gen-prev").addEventListener("click", function () { setSlot((parseInt($("gen-slot").value, 10) || 1) - 1); });
   $("gen-slot").addEventListener("change", function () { setSlot(parseInt($("gen-slot").value, 10) || 1); });
+  $("gen-country").addEventListener("change", genMeta);
 
   function genCacheKey() {
-    return "rv_gen_" + (parseInt($("gen-slot").value, 10) || 1) + "_" + ($("gen-word").value.trim() || "any");
+    return "rv_gen_" + (parseInt($("gen-slot").value, 10) || 1) + "_" +
+      ($("gen-word").value.trim() || "any") + "_" + ($("gen-country").value || "any");
   }
 
-  $("gen-go").addEventListener("click", function () {
+$("gen-go").addEventListener("click", function () {
     var slot = parseInt($("gen-slot").value, 10) || 1;
     var keyword = $("gen-word").value.trim();
+    var country = $("gen-country").value;
     var key = genCacheKey();
     var cached = storage(key);
     if (cached) { renderGen(cached, key); return; }
-    $("gen-loading").querySelector(".loading-label").textContent = "Generating recipe #" + slot.toLocaleString("en-US") + "...";
-    setLoading("gen-loading", true);
+    var load = startLoader("gen-loading", LOAD_QUOTES.gen, 20);
     $("gen-result").innerHTML = "";
-    gemini(window.KEY_GENERAL, GEN_DISCOVER_SYS, [{ text: "Slot: " + slot + (keyword ? ". Keyword: " + keyword : "") + "." }])
+    var hint = "Slot: " + slot + ".";
+    if (country) hint += " Pick a dish that is an iconic dish of " + country + ".";
+    if (keyword) hint += " The dish MUST match this keyword: '" + keyword + "'.";
+    gemini(window.KEY_GENERAL, GEN_DISCOVER_SYS, [{ text: hint }])
       .then(function (d) {
         var dish = (d.dish || "").trim();
         if (!dish) throw new Error("Could not pick a dish.");
@@ -703,19 +790,18 @@ var GEN_AUTHOR_SYS = [
         return gemini(window.KEY_RECIPES, GEN_AUTHOR_SYS, [{ text: "Dish to author: " + dish + (cty ? " (true cuisine: " + cty + ")" : "") + "." }]);
       })
       .then(function (recipe) {
-        setLoading("gen-loading", false);
+        load.done();
         storage(key, recipe);
         renderGen(recipe, key);
       })
       .catch(function (e) {
-        setLoading("gen-loading", false);
+        load.done();
         $("gen-result").innerHTML = errBox(e.message);
       });
   });
   function renderGen(recipe, key) {
     var list = $("gen-result");
     list.innerHTML = recipeCardHtml(recipe, "Recipe #" + slotLabel());
-    wireOpenButtons(list);
     genMeta();
   }
 
