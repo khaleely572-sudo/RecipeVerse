@@ -241,6 +241,13 @@ input[type="file"] { border: 1px dashed var(--line); border-radius: 10px; paddin
   box-shadow: 0 6px 24px var(--shadow); z-index: 200; max-width: 90vw; text-align: center;
 }
 
+.pro-card { margin-top: 14px; }
+.pro-price { font-size: 2.2rem; font-weight: 800; letter-spacing: -0.02em; }
+.pro-price span { font-size: 1rem; font-weight: 500; color: var(--muted); }
+.pro-perks { list-style: none; margin: 12px 0 18px; }
+.pro-perks li { padding: 6px 0 6px 24px; position: relative; font-size: 0.92rem; }
+.pro-perks li::before { content: "\2713"; position: absolute; left: 2px; color: var(--accent); font-weight: 700; }
+
 .foot { text-align: center; padding: 30px 20px 40px; font-size: 0.8rem; }
 
 /* ---------------- mobile ---------------- */

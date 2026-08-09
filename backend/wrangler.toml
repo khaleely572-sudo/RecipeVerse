@@ -2,6 +2,15 @@ name = "recipeverse-backend"
 main = "src/index.js"
 compatibility_date = "2024-11-01"
 
+# PayPal subscriptions. Keep PAYPAL_CLIENT_ID / PAYPAL_CLIENT_SECRET as SECRETS
+# (wrangler secret put PAYPAL_CLIENT_ID) - never put them in this file.
+# PAYPAL_PLAN_ID is the subscription plan id from the PayPal dashboard,
+# e.g. "P-1AB2C3DEF4G5H6I7J8K9".
+[vars]
+PAYPAL_MODE = "live"
+PAYPAL_PLAN_ID = ""
+CHECKOUT_TEST = "0"
+
 [[durable_objects.bindings]]
 name = "LEDGER"
 class_name = "CreditLedger"

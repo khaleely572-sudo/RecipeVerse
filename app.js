@@ -22,7 +22,7 @@
 
   var TOTAL_SLOTS = 60000;
   var user = storage("rv_user") || null;
-  var state = { fridgeItems: null };
+  var state = { fridgeItems: null, subscribed: false, balance: 0 };
 
   /* ---------------- AI budget + throttle ---------------- */
   var aiLogKey = "rv_ai_log";
@@ -48,12 +48,16 @@
       if (foot) foot.textContent = "";
       return;
     }
+    state.subscribed = !!info.subscribed;
+    state.balance = info.balance || 0;
+    var proBtn = $("pro-btn");
+    if (proBtn) proBtn.textContent = state.subscribed ? "Pro on" : "Go Pro";
     if (badge) {
       badge.classList.remove("hidden");
-      badge.textContent = "Credits: " + info.credits;
+      badge.textContent = (state.subscribed ? "Pro - " : "Credits: ") + info.credits;
       badge.classList.toggle("zero", info.credits <= 0);
     }
-    if (foot) foot.textContent = "Your credits: " + info.credits;
+    if (foot) foot.textContent = (state.subscribed ? "Pro member - " : "Your credits: ") + info.credits;
   }
   function renderAiMeter() {
     if (!window.API_BASE) {
@@ -71,7 +75,7 @@
           registerUser().catch(function () {});
           return;
         }
-        renderCredits({ credits: d.credits || 0, poolLeft: d.poolLeft || 0 });
+        renderCredits({ credits: d.credits || 0, poolLeft: d.poolLeft || 0, subscribed: !!d.subscribed, balance: d.balance || 0 });
       })
       .catch(function () {});
   }
@@ -79,7 +83,7 @@
   var aiLast = 0;
   function throttled(fn) {
     var p = aiChain.then(function () {
-      var gap = window.AI_MIN_GAP_MS || 5000;
+      var gap = state.subscribed ? (window.AI_MIN_GAP_SUB_MS || 1200) : (window.AI_MIN_GAP_MS || 5000);
       var wait = gap - (Date.now() - aiLast);
       if (wait > 0) return new Promise(function (r) { setTimeout(r, wait); });
     }).then(fn).then(function (v) { aiLast = Date.now(); return v; });
@@ -234,6 +238,87 @@
     location.reload();
   });
 
+  /* ---------------- pro subscription ---------------- */
+  function proSync() {
+    var subBtn = $("pro-subscribe");
+    var goBtn = $("pro-go-paypal");
+    var manageBtn = $("pro-manage");
+    var status = $("pro-status");
+    if (state.subscribed) {
+      subBtn.classList.add("hidden");
+      goBtn.classList.add("hidden");
+      manageBtn.classList.remove("hidden");
+      status.textContent = "Pro credits in your balance: " + state.balance + ". 1,000 are added each month.";
+    } else {
+      subBtn.classList.remove("hidden");
+      goBtn.classList.add("hidden");
+      manageBtn.classList.add("hidden");
+      status.textContent = "";
+    }
+  }
+  $("pro-btn").addEventListener("click", function () {
+    proSync();
+    $("pro-modal").classList.remove("hidden");
+  });
+  $("pro-close").addEventListener("click", function () {
+    $("pro-modal").classList.add("hidden");
+    $("pro-go-paypal").classList.add("hidden");
+    $("pro-subscribe").classList.remove("hidden");
+    $("pro-status").textContent = "";
+  });
+  $("pro-subscribe").addEventListener("click", function () {
+    var status = $("pro-status");
+    status.textContent = "Contacting PayPal...";
+    ensureUid().then(function (uid) {
+      if (!uid) throw new Error("Could not create your credit account first.");
+      var here = window.location.origin + window.location.pathname;
+      return fetch(window.API_BASE + "/api/pay/subscribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: uid, returnUrl: here, cancelUrl: here })
+      }).then(function (r) { return r.json(); }).then(function (d) {
+        if (!d || d.ok !== true) throw new Error((d && d.error) || "PayPal setup failed.");
+        $("pro-go-paypal").dataset.approveUrl = d.approveUrl;
+        $("pro-subscribe").classList.add("hidden");
+        $("pro-go-paypal").classList.remove("hidden");
+        status.textContent = "Your PayPal checkout is ready below.";
+      });
+    }).catch(function (e) {
+      status.textContent = (e && e.message) || "Could not reach PayPal setup.";
+    });
+  });
+  $("pro-go-paypal").addEventListener("click", function () {
+    var url = this.dataset.approveUrl;
+    if (!url) return;
+    var status = $("pro-status");
+    status.textContent = "Waiting for PayPal...";
+    window.open(url, "_blank", "noopener,width=520,height=640");
+    var tries = 0;
+    var timer = setInterval(function () {
+      tries++;
+      var uid = getUid();
+      if (!uid) { clearInterval(timer); return; }
+      fetch(window.API_BASE + "/api/pay/status", { headers: { "x-user-id": uid } })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (d && d.ok && d.subscribed) {
+            clearInterval(timer);
+            renderAiMeter();
+            proSync();
+            closeModal();
+            toast("Welcome to Pro! 1,000 credits added.");
+          } else if (tries > 45) {
+            clearInterval(timer);
+            status.textContent = "Still waiting. Approved in PayPal? It may take a moment - or just reopen Go Pro later.";
+          }
+        })
+        .catch(function () {});
+    }, 3000);
+  });
+  $("pro-manage").addEventListener("click", function () {
+    window.open("https://www.paypal.com/myaccount/autopay/", "_blank", "noopener");
+  });
+
   /* ---------------- Gemini ---------------- */
   function fileToData(file) {
     return new Promise(function (res, rej) {
@@ -307,7 +392,7 @@
           if (!data || data.ok !== true) {
             throw new Error((data && data.error) || ("Backend error (HTTP " + res.status + ")."));
           }
-          renderAiMeterFrom({ credits: data.remaining, poolLeft: data.poolLeft });
+          renderAiMeterFrom({ credits: data.remaining, poolLeft: data.poolLeft, subscribed: !!data.subscribed, balance: 0 });
           return extractJSON(data.text);
         });
       });
