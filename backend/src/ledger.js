@@ -1,4 +1,4 @@
-import { DurableObject } from "cloudflare:workers";
+﻿import { DurableObject } from "cloudflare:workers";
 
 export class CreditLedger extends DurableObject {
   constructor(ctx, env) {
@@ -75,7 +75,7 @@ export class CreditLedger extends DurableObject {
       throw new Error("PayPal could not create the subscription: " + (data.message || ("HTTP " + res.status)));
     }
     const approve = (data.links || []).find((l) => l.rel === "approve");
-    return { id: data.id, approveUrl: approve ? approve.link : null };
+    return { id: data.id, approveUrl: approve ? approve.href : null };
   }
 
   async getSubscription(subId) {
@@ -114,6 +114,39 @@ export class CreditLedger extends DurableObject {
     if (u.sub.lastRenewMonth === mk) return false;
     u.sub.lastRenewMonth = mk;
     u.balance = (u.balance || 0) + this.SUB_CREDITS;
+    await this.setJson("users", users);
+    return true;
+  }
+
+  async refreshSubscription(userId) {
+    const users = (await this.getJson("users")) || {};
+    const u = users[userId];
+    if (!u || !u.sub || !u.sub.active) return false;
+    const mk = this.monthKey();
+    const monthChanged = u.sub.lastRenewMonth !== mk;
+    const stale = Date.now() - (u.sub.checkedAt || u.sub.since || 0) > 48 * 3600 * 1000;
+    if (!monthChanged && !stale) return true;
+    let ok = false;
+    try {
+      const sub = await this.getSubscription(u.sub.subId);
+      ok = !!(sub && sub.id && sub.status === "ACTIVE");
+      if (ok && this.env.PAYPAL_PLAN_ID) {
+        const pid = sub.plan_id || (sub.plan && sub.plan.id);
+        if (pid && pid !== this.env.PAYPAL_PLAN_ID) ok = false;
+      }
+    } catch (e) {
+      return true;
+    }
+    if (!ok) {
+      u.sub.active = false;
+      await this.setJson("users", users);
+      return false;
+    }
+    u.sub.checkedAt = Date.now();
+    if (monthChanged) {
+      u.sub.lastRenewMonth = mk;
+      u.balance = (u.balance || 0) + this.SUB_CREDITS;
+    }
     await this.setJson("users", users);
     return true;
   }
@@ -166,9 +199,23 @@ export class CreditLedger extends DurableObject {
     if (!/^u[0-9]+$/.test(userId)) return { ok: false, error: "Couldn't match the subscription to an account." };
     const eventType = (body && body.event_type) || "";
     if (eventType === "BILLING.SUBSCRIPTION.ACTIVATED" || eventType === "BILLING.SUBSCRIPTION.APPROVED") {
+      const sub = await this.getSubscription(subId).catch(() => ({}));
+      if (!sub || !sub.id || sub.status !== "ACTIVE") {
+        return { ok: false, error: "Subscription is not ACTIVE on PayPal - not activated." };
+      }
+      const pid = sub.plan_id || (sub.plan && sub.plan.id);
+      if (this.env.PAYPAL_PLAN_ID && pid && pid !== this.env.PAYPAL_PLAN_ID) {
+        return { ok: false, error: "Plan mismatch." };
+      }
+      userId = sub.custom_id && /^u[0-9]+$/.test(sub.custom_id) ? sub.custom_id : userId;
+      if (!/^u[0-9]+$/.test(userId)) return { ok: false, error: "Couldn't match the subscription to an account." };
       return this.setSubscription(userId, subId);
     }
     if (eventType === "PAYMENT.SALE.COMPLETED") {
+      const sub = await this.getSubscription(subId).catch(() => ({}));
+      if (!sub || !sub.id || sub.status !== "ACTIVE") {
+        return { ok: false, error: "Subscription not ACTIVE - no credits granted." };
+      }
       await this.ensureSubRenew(userId);
       const users = (await this.getJson("users")) || {};
       const u = users[userId];
@@ -283,7 +330,7 @@ export class CreditLedger extends DurableObject {
     const u = users[userId];
     const meta = await this.getJson("meta");
     const subscribed = !!(u && u.sub && u.sub.active);
-    if (u) await this.ensureSubRenew(userId);
+    if (u) await this.refreshSubscription(userId);
     return {
       ok: !!u,
       credits: u ? (u.balance || 0) + (u.credits || 0) : 0,
@@ -300,7 +347,7 @@ export class CreditLedger extends DurableObject {
     const users = (await this.getJson("users")) || {};
     const u = users[userId];
     if (!u) return { status: "no_user", error: "Unknown user. Please refresh the page." };
-    await this.ensureSubRenew(userId);
+    await this.refreshSubscription(userId);
     const subscribed = !!(u.sub && u.sub.active);
     if (!subscribed && meta.calls >= this.DAILY_CAP) {
       return { status: "pool_empty", error: "Today's shared credit pool is used up. It refills at midnight." };
