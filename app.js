@@ -265,6 +265,9 @@
     if (window.API_BASE) {
       return throttled(function () { return backendGemini(key, system, userParts); });
     }
+    if (!key) {
+      return Promise.reject(new Error("This build isn't connected to the AI service yet. Open the live site: https://khaleely572-sudo.github.io/RecipeVerse/"));
+    }
     if (!aiBudgetOk()) {
       return Promise.reject(new Error("You've used up today's free AI budget in this browser - it resets at midnight. Any recipes you already generated are still cached and viewable."));
     }
