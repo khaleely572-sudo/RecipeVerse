@@ -16,6 +16,10 @@
     } catch (e) { return v === undefined ? null : undefined; }
   };
 
+  if (!window.API_BASE) {
+    try { window.API_BASE = 'https://recipeverse-backend.khaleely572.workers.dev'; } catch (e) {}
+  }
+
   var TOTAL_SLOTS = 60000;
   var user = storage("rv_user") || null;
   var state = { fridgeItems: null };
@@ -266,7 +270,7 @@
       return throttled(function () { return backendGemini(key, system, userParts); });
     }
     if (!key) {
-      return Promise.reject(new Error("This build isn't connected to the AI service yet. Open the live site: https://khaleely572-sudo.github.io/RecipeVerse/"));
+      return Promise.reject(new Error("AI service isn't configured for this build yet. Please refresh the page and try again."));
     }
     if (!aiBudgetOk()) {
       return Promise.reject(new Error("You've used up today's free AI budget in this browser - it resets at midnight. Any recipes you already generated are still cached and viewable."));
