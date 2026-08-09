@@ -50,6 +50,7 @@
     }
     state.subscribed = !!info.subscribed;
     state.balance = info.balance || 0;
+    if (info.nextBilling !== undefined) state.nextBilling = info.nextBilling || null;
     var proBtn = $("pro-btn");
     if (proBtn) proBtn.textContent = state.subscribed ? "Pro on" : "Go Pro";
     if (badge) {
@@ -75,7 +76,7 @@
           registerUser().catch(function () {});
           return;
         }
-        renderCredits({ credits: d.credits || 0, poolLeft: d.poolLeft || 0, subscribed: !!d.subscribed, balance: d.balance || 0 });
+        renderCredits({ credits: d.credits || 0, poolLeft: d.poolLeft || 0, subscribed: !!d.subscribed, balance: d.balance || 0, nextBilling: d.nextBilling || null });
       })
       .catch(function () {});
   }
@@ -239,6 +240,14 @@
   });
 
   /* ---------------- pro subscription ---------------- */
+  function fmtDate(iso) {
+    if (!iso) return "date not set yet";
+    try {
+      return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+    } catch (e) {
+      return "date not set yet";
+    }
+  }
   function proSync() {
     var subBtn = $("pro-subscribe");
     var goBtn = $("pro-go-paypal");
@@ -248,7 +257,8 @@
       subBtn.classList.add("hidden");
       goBtn.classList.add("hidden");
       manageBtn.classList.remove("hidden");
-      status.textContent = "Pro credits in your balance: " + state.balance + ". 1,000 are added each month.";
+      var bill = "next billing " + fmtDate(state.nextBilling);
+      status.textContent = "Pro active - " + bill + ". Balance: " + state.balance + " credits (1,000 added each month).";
     } else {
       subBtn.classList.remove("hidden");
       goBtn.classList.add("hidden");

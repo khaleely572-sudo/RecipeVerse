@@ -88,7 +88,7 @@ export class CreditLedger extends DurableObject {
     return res.json().catch(() => ({}));
   }
 
-  async setSubscription(userId, subId) {
+  async setSubscription(userId, subId, nextBilling) {
     const users = (await this.getJson("users")) || {};
     const u = users[userId];
     if (!u) return { ok: false, error: "Unknown user." };
@@ -101,7 +101,8 @@ export class CreditLedger extends DurableObject {
       subId,
       since: already ? u.sub.since : Date.now(),
       lastRenewMonth: this.monthKey(),
-      plan: this.env.PAYPAL_PLAN_ID || "pro"
+      plan: this.env.PAYPAL_PLAN_ID || "pro",
+      nextBilling: nextBilling || u.sub.nextBilling || new Date(Date.now() + 30 * 86400000).toISOString()
     };
     u.lastSeen = Date.now();
     await this.setJson("users", users);
@@ -145,6 +146,7 @@ export class CreditLedger extends DurableObject {
       return false;
     }
     u.sub.checkedAt = Date.now();
+    u.sub.nextBilling = sub.next_billing_time || u.sub.nextBilling;
     if (monthChanged) {
       u.sub.lastRenewMonth = mk;
       u.balance = (u.balance || 0) + this.SUB_CREDITS;
@@ -172,7 +174,7 @@ export class CreditLedger extends DurableObject {
       ? customId
       : (expectedUserId && /^u[0-9]+$/.test(expectedUserId) ? expectedUserId : null);
     if (!userId) return { ok: false, error: "Couldn't match the subscription to your account." };
-    return this.setSubscription(userId, subId);
+    return this.setSubscription(userId, subId, sub.next_billing_time || "");
   }
 
   async handlePayWebhook(body) {
@@ -211,7 +213,7 @@ export class CreditLedger extends DurableObject {
       }
       userId = sub.custom_id && /^u[0-9]+$/.test(sub.custom_id) ? sub.custom_id : userId;
       if (!/^u[0-9]+$/.test(userId)) return { ok: false, error: "Couldn't match the subscription to an account." };
-      return this.setSubscription(userId, subId);
+      return this.setSubscription(userId, subId, sub.next_billing_time || "");
     }
     if (eventType === "PAYMENT.SALE.COMPLETED") {
       const sub = await this.getSubscription(subId).catch(() => ({}));
@@ -222,7 +224,10 @@ export class CreditLedger extends DurableObject {
       const users = (await this.getJson("users")) || {};
       const u = users[userId];
       if (u && !(u.sub && u.sub.active)) {
-        u.sub = { active: true, subId, since: Date.now(), lastRenewMonth: this.monthKey(), plan: this.env.PAYPAL_PLAN_ID || "pro" };
+        u.sub = { active: true, subId, since: Date.now(), lastRenewMonth: this.monthKey(), plan: this.env.PAYPAL_PLAN_ID || "pro", nextBilling: resource.next_billing_time || "" };
+        await this.setJson("users", users);
+      } else if (u && u.sub) {
+        u.sub.nextBilling = resource.next_billing_time || sub.next_billing_time || u.sub.nextBilling;
         await this.setJson("users", users);
       }
       return { ok: true };
@@ -250,7 +255,7 @@ export class CreditLedger extends DurableObject {
     const u = users[userId];
     if (u && u.sub && u.sub.active) {
       await this.refreshSubscription(userId);
-      return { ok: true, subscribed: true, balance: u.balance || 0, credits: (u.balance || 0) + (u.credits || 0) };
+      return { ok: true, subscribed: true, balance: u.balance || 0, credits: (u.balance || 0) + (u.credits || 0), nextBilling: u.sub.nextBilling || null };
     }
     const checkId = subId || (u && u.subPending) || "";
     if (!checkId) return { ok: true, subscribed: false };
@@ -368,6 +373,7 @@ export class CreditLedger extends DurableObject {
       credits: u ? (u.balance || 0) + (u.credits || 0) : 0,
       balance: u ? (u.balance || 0) : 0,
       subscribed,
+      nextBilling: u && u.sub && u.sub.active ? (u.sub.nextBilling || null) : null,
       usedToday: meta.calls,
       poolLeft: Math.max(this.DAILY_CAP - meta.calls, 0)
     };
