@@ -1,0 +1,203 @@
+﻿<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>RecipeVerse</title>
+<link rel="stylesheet" href="styles.css" />
+<script>
+  (function () {
+    try {
+      var t = localStorage.getItem('rv_theme') || 'light';
+      document.documentElement.setAttribute('data-theme', t);
+    } catch (e) {}
+  })();
+</script>
+</head>
+<body>
+
+  <!-- Auth overlay (login / welcome) -->
+  <div id="auth-overlay" class="overlay">
+    <div class="auth-card">
+      <div class="logo lg">Recipe<span>Verse</span></div>
+      <p class="tagline">Cook smarter. Scan it, cook it, rate it.</p>
+      <h1 id="auth-title">Welcome to RecipeVerse</h1>
+      <p id="auth-sub" class="muted">Tell us who you are so we can tailor every dish to your corner of the world.</p>
+      <div class="auth-form">
+        <label for="auth-name">Your name</label>
+        <input id="auth-name" type="text" placeholder="e.g. lamb, noodles, dessert" maxlength="40" autocomplete="name" />
+        <label for="auth-country">Your country</label>
+        <select id="auth-country"></select>
+        <button id="auth-submit" class="btn">Enter RecipeVerse</button>
+      </div>
+      <p class="muted fine">Your details stay on this device. No account needed.</p>
+    </div>
+  </div>
+
+  <!-- Header -->
+  <header class="topbar">
+    <div class="brand">Recipe<span>Verse</span></div>
+    <button id="nav-toggle" class="menu-btn" aria-label="Toggle menu" aria-expanded="false" aria-controls="main-nav">
+      <span></span><span></span><span></span>
+    </button>
+    <nav class="nav" id="main-nav">
+      <button class="nav-btn" data-view="home">Recipe of the Day</button>
+      <button class="nav-btn" data-view="calorie">Calorie Scanner</button>
+      <button class="nav-btn" data-view="fridge">Fridge Scanner</button>
+      <button class="nav-btn" data-view="generator">Recipe Generator</button>
+    </nav>
+    <div class="actions">
+      <span id="credits-badge" class="credits-badge hidden" title="Your AI credits, refreshed each day."></span>
+      <span id="user-chip" class="user-chip"></span>
+      <button id="theme-toggle" class="theme-btn" title="Toggle light / dark" aria-label="Toggle theme">
+        <svg id="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <svg id="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      </button>
+      <button id="profile-btn" class="btn small">Profile</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- HOME / RECIPE OF THE DAY -->
+    <section id="view-home" class="view">
+      <div class="hero">
+        <h2 class="greet" id="greet"></h2>
+        <p class="muted">Scan your plate, scan your fridge, or browse a world of recipes.</p>
+      </div>
+
+      <div class="rotw-header">
+        <h3><span class="rotw-pill">DAILY</span> Recipe of the Day</h3>
+        <div class="rotw-ctrl">
+          <select id="rotw-country" title="Change country for today's pick"></select>
+          <button id="rotw-refresh" class="btn small">New pick</button>
+        </div>
+      </div>
+      <p class="muted tiny" id="rotw-note">Fresh recipe every day at midnight, inspired by your country.</p>
+      <div id="rotw-loading" class="state-line">Picking today&rsquo;s recipe...</div>
+      <article id="rotw-card" class="card recipe-card hidden"></article>
+
+      <div class="cards-row">
+        <div class="tile" data-go="calorie">
+          <h3>Calorie Scanner</h3>
+          <p>Snap a photo of any plate and get calories &amp; macros.</p>
+          <span class="tile-cta">Open &rsaquo;</span>
+        </div>
+        <div class="tile" data-go="fridge">
+          <h3>Fridge Scanner</h3>
+          <p>Photograph every shelf, we identify everything, then suggest real recipes.</p>
+          <span class="tile-cta">Open &rsaquo;</span>
+        </div>
+        <div class="tile" data-go="generator">
+          <h3>Recipe Generator</h3>
+          <p>60,000 recipes by country. Pick a region, cook a classic.</p>
+          <span class="tile-cta">Open &rsaquo;</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- CALORIE -->
+    <section id="view-calorie" class="view hidden">
+      <header class="view-header">
+        <h2>Calorie Scanner</h2>
+        <p class="muted">Upload a photo of a meal or dish - or just describe it - and our AI identifies it and estimates the calories and macros.</p>
+      </header>
+      <div class="scanner-grid">
+        <div class="card">
+          <label for="cal-img">Photo (<em>or</em> text below)</label>
+          <input id="cal-img" type="file" accept="image/*" capture="environment" />
+          <div id="cal-preview" class="preview hidden"></div>
+          <label for="cal-text">Or type the food</label>
+          <input id="cal-text" type="text" placeholder="e.g. lamb, noodles, dessert" />
+          <button id="cal-scan" class="btn block">Scan Calories</button>
+        </div>
+        <div class="card">
+          <div id="cal-loading" class="state hidden">Reading your plate...</div>
+          <div id="cal-result" class="result-list"></div>
+          <p id="cal-empty" class="muted">Results will appear here.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- FRIDGE -->
+    <section id="view-fridge" class="view hidden">
+      <header class="view-header">
+        <h2>Fridge Scanner</h2>
+        <p class="muted">Take pictures of every shelf, crisper drawer and door bin. Our AI will carefully identify <em>every</em> item, then we turn those ingredients into real recipes you can cook tonight.</p>
+      </header>
+      <div class="card">
+        <label for="fridge-img">Photos of your fridge</label>
+        <input id="fridge-img" type="file" accept="image/*" capture="environment" multiple />
+        <div id="fridge-preview" class="preview"></div>
+        <div class="row">
+          <button id="fridge-scan" class="btn">Scan &amp; Identify Everything</button>
+          <button id="fridge-recipes" class="btn" disabled>Generate Recipes</button>
+        </div>
+      </div>
+      <div id="fridge-loading" class="state hidden">Opening the fridge door in your kitchen...</div>
+      <div id="fridge-items" class="card hidden">
+        <h3>Everything found in your fridge</h3>
+        <div id="fridge-items-list" class="chips"></div>
+        <p class="muted tiny" id="fridge-note"></p>
+      </div>
+      <div id="fridge-recipes-wrap" class="hidden">
+        <h3 class="section-title">Recipes built from your fridge</h3>
+        <div id="fridge-recipes-list" class="cards-list"></div>
+      </div>
+    </section>
+
+    <!-- GENERATOR -->
+    <section id="view-generator" class="view hidden">
+      <header class="view-header">
+        <h2>Recipe Generator</h2>
+        <p class="muted">A catalog of <strong>60,000 recipes</strong> from cuisines all over the world. Hop between catalog slots (or add a keyword) and real recipes with true ingredients and oven instructions are created live.</p>
+      </header>
+      <div class="card">
+        <label for="gen-word">Dish keyword <span class="muted">(optional)</span></label>
+        <input id="gen-word" type="text" placeholder="e.g. lamb, noodles, dessert" />
+        <div class="row wrap">
+          <button id="gen-random" class="btn">Random recipe</button>
+          <button id="gen-prev" class="btn" title="Previous slot">&larr;</button>
+          <input id="gen-slot" type="number" min="1" max="60000" class="slot-input" value="1" aria-label="Catalog slot (1-60000)" />
+          <button id="gen-next" class="btn" title="Next slot">&rarr;</button>
+          <button id="gen-go" class="btn">Cook this slot</button>
+        </div>
+        <p class="muted tiny" id="gen-meta">Slot #1 of 60,000 &middot; recipes are generated on demand, not stored all at once.</p>
+      </div>
+      <div id="gen-loading" class="state hidden"></div>
+      <div id="gen-result" class="cards-list"></div>
+    </section>
+  </main>
+
+  <!-- Recipe modal -->
+  <div id="recipe-modal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-card">
+      <button id="modal-close" class="modal-close" aria-label="Close">&times;</button>
+      <div id="modal-body"></div>
+    </div>
+  </div>
+
+  <!-- Profile modal -->
+  <div id="profile-modal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-card slim">
+      <button id="profile-close" class="modal-close" aria-label="Close">&times;</button>
+      <h2>Your profile</h2>
+      <div class="auth-form">
+        <label for="profile-name">Name</label>
+        <input id="profile-name" type="text" maxlength="40" />
+        <label for="profile-country">Country</label>
+        <select id="profile-country"></select>
+        <button id="profile-save" class="btn block">Save</button>
+        <button id="profile-logout" class="btn block ghost">Log out</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <footer class="foot muted">RecipeVerse &mdash; recipes crafted by AI. Your photos never leave your browser.<br /><span id="ai-meter"></span></footer>
+
+  <script src="countries.js"></script>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
