@@ -234,6 +234,36 @@ export class CreditLedger extends DurableObject {
     return !!(u && u.sub && u.sub.active);
   }
 
+  async setPendingSub(userId, subId) {
+    const users = (await this.getJson("users")) || {};
+    const u = users[userId];
+    if (!u) return { ok: false, error: "Unknown user." };
+    u.subPending = subId;
+    await this.setJson("users", users);
+    return { ok: true, subId };
+  }
+
+  async statusOrActivate(userId, subId) {
+    const users = (await this.getJson("users")) || {};
+    const u = users[userId];
+    if (u && u.sub && u.sub.active) {
+      await this.refreshSubscription(userId);
+      return { ok: true, subscribed: true, balance: u.balance || 0, credits: (u.balance || 0) + (u.credits || 0) };
+    }
+    const checkId = subId || (u && u.subPending) || "";
+    if (!checkId) return { ok: true, subscribed: false };
+    const sub = await this.getSubscription(checkId).catch(() => ({}));
+    if (!sub || !sub.id) {
+      if (subId) return { ok: false, error: "PayPal couldn't verify this subscription." };
+      return { ok: true, subscribed: false };
+    }
+    if (sub.status === "ACTIVE") {
+      const r = await this.activateSubscription(subId || checkId, userId);
+      return r;
+    }
+    return { ok: true, subscribed: false, pending: sub.status || "unknown", subId: checkId };
+  }
+
   async getJson(key) {
     const val = await this.kv.get(key);
     return val == null ? undefined : JSON.parse(val);

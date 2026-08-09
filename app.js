@@ -279,6 +279,7 @@
       }).then(function (r) { return r.json(); }).then(function (d) {
         if (!d || d.ok !== true) throw new Error((d && d.error) || "PayPal setup failed.");
         $("pro-go-paypal").dataset.approveUrl = d.approveUrl;
+        $("pro-go-paypal").dataset.subId = d.id || "";
         $("pro-subscribe").classList.add("hidden");
         $("pro-go-paypal").classList.remove("hidden");
         status.textContent = "Your PayPal checkout is ready below.";
@@ -298,7 +299,8 @@
       tries++;
       var uid = getUid();
       if (!uid) { clearInterval(timer); return; }
-      fetch(window.API_BASE + "/api/pay/status", { headers: { "x-user-id": uid } })
+      var subId = $("pro-go-paypal").dataset.subId || "";
+      fetch(window.API_BASE + "/api/pay/status?subId=" + encodeURIComponent(subId), { headers: { "x-user-id": uid } })
         .then(function (r) { return r.json(); })
         .then(function (d) {
           if (d && d.ok && d.subscribed) {
@@ -307,9 +309,18 @@
             proSync();
             closeModal();
             toast("Welcome to Pro! 1,000 credits added.");
-          } else if (tries > 45) {
+          } else if (d && d.ok && d.pending) {
+            var msg = "PayPal status: " + d.pending + ". ";
+            if (d.pending === "APPROVAL_PENDING") {
+              status.textContent = msg + "Finish the approval in the PayPal window and try again in a minute.";
+            } else if (d.pending === "APPROVED") {
+              status.textContent = msg + "First payment is processing - credits arrive in a minute or two.";
+            } else {
+              status.textContent = msg + "Waiting...";
+            }
+          } else if (tries > 80) {
             clearInterval(timer);
-            status.textContent = "Still waiting. Approved in PayPal? It may take a moment - or just reopen Go Pro later.";
+            status.textContent = "Still nothing. If PayPal shows an error, tell us the exact message.";
           }
         })
         .catch(function () {});

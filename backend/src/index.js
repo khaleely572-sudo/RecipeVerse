@@ -141,6 +141,7 @@ export default {
       const curl = safe(cancelUrl) || "https://recipverse.vercel.app/";
       try {
         const sub = await stub.createSubscription({ userId, returnUrl: rurl, cancelUrl: curl });
+        await stub.setPendingSub(userId, sub.id);
         return json({ ok: true, id: sub.id, approveUrl: sub.approveUrl });
       } catch (e) {
         return json({ ok: false, error: e && e.message ? e.message : "PayPal setup failed." }, 500);
@@ -160,9 +161,9 @@ export default {
 
     if (path === "/api/pay/status" && request.method === "GET") {
       const userId = request.headers.get("x-user-id") || "";
+      const subId = url.searchParams.get("subId") || "";
       if (!UID_RE.test(userId)) return json({ ok: false, error: "Invalid user id." }, 400);
-      const sub = await stub.isSub(userId);
-      return json({ ok: true, subscribed: sub });
+      return json(await stub.statusOrActivate(userId, subId));
     }
 
     if (path === "/api/pay/test" && request.method === "POST" && env.CHECKOUT_TEST === "1") {
