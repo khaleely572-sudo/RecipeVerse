@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://recipe-verse-one.vercel.app/sitemap.xml
+Sitemap: https://recipverse.vercel.app/sitemap.xml
